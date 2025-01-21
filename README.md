@@ -7,26 +7,28 @@
   Add your open source license, GitHub uses MIT license.
 -->
 
-# Introduction to GitHub
+# Proyectos iniciales de s mujeres
 
-_Get started using GitHub in less than an hour._
+_Proyectos de datos: 
+1. SESNSP: incidencia.
+2. SESNSP: víctimas.
+3. SESNSP: llamadas 911.
+4. Desaparecidos.
+5. BANAVIM._
 
 </header>
 
 <!--
-  <<< Author notes: Step 1 >>>
-  Choose 3-5 steps for your course.
-  The first step is always the hardest, so pick something easy!
-  Link to docs.github.com for further explanations.
-  Encourage users to open new tabs for steps!
+  <<< Author notes: se tiene que tomar en cuenta que los datos del secretariado salen el 20 de cada mes. >>>
+  
 -->
 
-## Step 1: Create a branch
+## Estructura
 
-_Welcome to "Introduction to GitHub"! :wave:_
+ :wave:_
 
-**What is GitHub?**: GitHub is a collaboration platform that uses _[Git](https://docs.github.com/get-started/quickstart/github-glossary#git)_ for versioning. GitHub is a popular place to share and contribute to [open-source](https://docs.github.com/get-started/quickstart/github-glossary#open-source) software.
-<br>:tv: [Video: What is GitHub?](https://www.youtube.com/watch?v=pBy1zgt0XPc)
+**SESNSP**: Los datos mensuales salen de _[SESNSP](https://www.gob.mx/sesnsp/acciones-y-programas/datos-abiertos-de-incidencia-delictiva)_ para actualizarlos a partir del 20 de cada mes.
+<br>
 
 **What is a repository?**: A _[repository](https://docs.github.com/get-started/quickstart/github-glossary#repository)_ is a project containing files and folders. A repository tracks versions of files and folders. For more information, see "[About repositories](https://docs.github.com/en/repositories/creating-and-managing-repositories/about-repositories)" from GitHub Docs.
 
