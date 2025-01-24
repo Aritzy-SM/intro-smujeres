@@ -111,7 +111,6 @@ base_vinc <- base %>%
   group_by(modalidad_violencia, detalle_vinculo_con_victima) %>% 
   summarise_at(mod_vio[1:6], sum, na.rm = TRUE)
 
-############################### VISUALIZACIONES REPORTE ##########################
 
 
 ##### ---------- 1.1. importar poblacion para sacar tasas de cambio--------------- ######
@@ -139,7 +138,8 @@ base_pob <- left_join(base_pob, base_pob_sex, by = c("Clave_Ent", "anual", "Enti
 
 base_pob_24 <- base_pob %>% 
   filter(anual == 2025)
-##### ---------- 1.2. vars territoriales: distribucion por estado ---------------- ######
+
+##### renombrar estados ######
 base <- base %>% 
   mutate(Entidad = ifelse(edo_domicilio == "Estado de México", "México",
                           ifelse(edo_domicilio == "Coahuila de Zaragoza", "Coahuila",
@@ -166,16 +166,152 @@ base$aux0 <- 1
 
 lista_euv <- unique(base$EUV_F)
 
-# total de victimas unicas por estado
+############################### VISUALIZACIONES REPORTE ##########################
+
+##### ---------- 1.1. vars territoriales: distribucion por tiempo ---------------- ######
+base <- base %>% 
+  mutate(dif_tiempo = difftime(fecha_recepcion, fecha_hechos, units='days'))
+
+# total de casos por año 
+tot_hist <- aggregate(aux0 ~ ymd(fecha_hechos) , data = base, sum)
+names(tot_hist)[1] <- "fecha_hechos_day"
+
+# total de casos por año 
+tot_anual <- aggregate(aux0 ~ year(fecha_hechos) , data = base, sum)
+names(tot_anual)[1] <- "fecha_hechos_anual"
+
+# total de casos por año y estado
+tot_anual_edo <- aggregate(aux0 ~ year(fecha_hechos) + edo_domicilio , data = base, sum)
+names(tot_anual_edo)[1] <- "fecha_hechos_anual"
+
+# promedio de tiempo de denuncia entre hecho y recepcion en banco
+prom_anual_edo <- aggregate(dif_tiempo ~ year(fecha_hechos) + edo_domicilio , data = base, mean)
+names(prom_anual_edo)[1] <- "fecha_hechos_anual"
+prom_anual_edo$dif_tiempo <- as.numeric(round(prom_anual_edo$dif_tiempo, 2))
+
+
+prom_anual_edo$fecha_hechos_anual <- as.factor(prom_anual_edo$fecha_hechos_anual)
+
+
+#### grafs edo
+
+
+ggnac <- ggplot(data=tot_anual,aes(x=fecha_hechos_anual,y=aux0)) +
+  geom_line() +
+  xlab("Año")+ylab("Total de casos ~ histórico") +
+  ggtitle("Total de casos - histórico ")
+
+tot_anual$fecha_hechos_anual <- as.factor(tot_anual$fecha_hechos_anual)
+
+
+## 1.1 graph 1 de tendencia histórica
+ggnac_hist <- ggplot(tot_anual, aes(x=fecha_hechos_anual, y=aux0, label = aux0, size = aux0,  group=1)) +
+  geom_line(colour='brown4', size =.4)+
+  geom_point(colour='brown4')+
+  xlab("")+ theme_bw()+
+  theme(axis.text.x = element_text(angle = 90)) +
+  geom_text(check_overlap = TRUE, vjust = -1, nudge_x = 0.05, size=3)+
+  xlab("Total de casos por año ~ histórico")+ylab("Número de casos") +
+  ggtitle("Total de casos por año ")
+
+ggnac_hist
+
+## grapg de diferencia entre tiempo de hecho y recepción
+gg_edo_prom <- 
+  ggplot(prom_anual_edo, aes(x = fecha_hechos_anual, y = dif_tiempo, size=dif_tiempo, label = paste(edo_domicilio, dif_tiempo, sep = "\n"))) +
+  geom_point(aes( col = dif_tiempo), alpha = 0.5) +
+  scale_size(range = c(5, 10)) + 
+  scale_colour_gradientn(colours=c("yellow","red")) + theme_bw()+
+  xlab("Años")+ylab("Diferencia de tiempo (fecha del hecho - fecha recepción) ~ en días") +
+  ggtitle("Promedio de tiempo por estado ")
+
+gg_edo_prom
+
+##### ---------- 1.2. vars territoriales: distribucion por estado ---------------- ######
+
+######## total de victimas unicas por estado - historico###################
 vu_edo <- aggregate(aux0 ~ EUV_F + edo_domicilio , data = base, sum)
+
+vu_edo$aux1 <- 1
+
+vu_edo_filter <- aggregate(aux1 ~ edo_domicilio , data = vu_edo, sum)
+
+names(vu_edo_filter)[2] <- "victimas"
+
 
 #total de casos por estado
 tot_edo <- aggregate(aux0 ~  edo_domicilio , data = base, sum)
 
-names(tot_edo)[2] <- "total_casos_edo"
+names(tot_edo)[2] <- "casos"
 
-#generar ranking pra categorizacion
-jenks_edo <- getJenksBreaks(tot_edo$total_casos_edo, 5)
+totales_edo <- left_join(tot_edo, vu_edo_filter, by = "edo_domicilio")
+
+totales_edo$reincidencia <- (totales_edo$casos - totales_edo$victimas)
+
+
+totales_edo <- totales_edo %>% 
+  pivot_longer(!edo_domicilio, names_to = "tipo", values_to = "totales")
+
+##### graph 1.2. comparativo entre total victimas, casos e reincidencia historico
+
+## graph de casos 
+ggcomphist <-  qplot(
+  x = totales,
+  y = edo_domicilio,
+  data = totales_edo,
+  color = tipo ,
+  xlab = "Total de casos vs víctimas ~ histórico ",
+  ylab = "Estados"
+) + geom_text_repel(label = totales_edo$totales)
+
+
+ggcomphist
+
+##### total de casos y victimas por año###############
+
+vu_edo_a <- aggregate(aux0 ~ EUV_F + anual_registro + edo_domicilio , data = base, sum)
+
+vu_edo_a$aux1 <- 1
+
+#total de casos por estado por año
+
+tot_edo_filter_a <- aggregate(aux0 ~  anual_registro + edo_domicilio, data = vu_edo_a, sum)
+names(tot_edo_filter_a)[3] <- "casos"
+
+#total de victimas por estado por año
+
+vu_edo_filter_a <- aggregate(aux1 ~  anual_registro + edo_domicilio, data = vu_edo_a, sum)
+
+names(vu_edo_filter_a)[3] <- "victimas"
+
+totales_edo_anual <- left_join(tot_edo_filter_a, vu_edo_filter_a, by = c("edo_domicilio", "anual_registro"))
+
+
+
+totales_edo_anual$prueba <- (totales_edo_anual$victimas== totales_edo_anual$casos)
+
+
+totales_edo_anual <- totales_edo_anual %>% 
+  pivot_longer(!c(edo_domicilio, anual_registro), names_to = "tipo", values_to = "totales")
+
+ggcomp_2 <- ggplot(totales_edo_anual, aes(x = Year, y = GDP, colour =Region, group = Region)) +  geom_line() + geom_point()
+
+
+ggcomp <- totales_edo %>% 
+  ggplot(aes(x = totales, y = edo_domicilio, fill = tipo))+
+  geom_col(position = "dodge") + 
+  geom_label(aes(label = totales),
+             nudge_x =-2.5,
+             size = 2.5)  + theme_bw()+
+  xlab("Total de casos vs víctimas ~ histórico")+ylab("Estados") +
+  ggtitle("Comparativa entre total de casos y total de víctimas por estado ")
+
+
+ggcomp
+
+
+#generar ranking pra categorizacion de total de casos
+jenks_edo <- getJenksBreaks(totales_edo_anual$casos, 5)
 
 jenks_edo <-  as.data.frame(jenks_edo)
 
@@ -188,7 +324,7 @@ jenks_edo <- jenks_edo %>%
   pivot_wider(names_from = ID, values_from = jenks_edo)
 
 # 
-# tot_edo <- tot_edo %>% 
+# tot_edo <- totales_edo %>% 
 #   mutate(categoria = ifelse(total_casos_edo<=jenks_edo$v_1, "Muy baja",
 #                             ifelse(jenks_edo$v_1<total_casos_edo & total_casos_edo<=jenks_edo$v_2, "Baja",
 #                             ifelse(jenks_edo$v_2<total_casos_edo & total_casos_edo<=jenks_edo$v_3, "Media",
@@ -196,7 +332,7 @@ jenks_edo <- jenks_edo %>%
 #                             ifelse(jenks_edo$v_4<total_casos_edo & total_casos_edo<=jenks_edo$v_5, "Muy alta", "Sin def"))))))
 
 
-tot_edo <- tot_edo %>% 
+tot_edo <- totales_edo %>% 
   mutate(categoria = ifelse(total_casos_edo<=jenks_edo$v_1, "1",
                             ifelse(jenks_edo$v_1<total_casos_edo & total_casos_edo<=jenks_edo$v_2, "2",
                                    ifelse(jenks_edo$v_2<total_casos_edo & total_casos_edo<=jenks_edo$v_3, "3",
@@ -204,7 +340,7 @@ tot_edo <- tot_edo %>%
                                                  ifelse(jenks_edo$v_4<total_casos_edo & total_casos_edo<=jenks_edo$v_5, "5", "Sin def"))))))
 
 
-tot_edo$categoria <- factor(tot_edo$categoria)
+totales_edo$categoria <- factor(totales_edo$categoria)
 
 # total de victimas unicas por municipio
 vu_mun <- aggregate(aux0 ~ EUV_F + edo_domicilio + mun_domicilio, data = base, sum)
@@ -214,7 +350,7 @@ tot_mun <- aggregate(aux0 ~  edo_domicilio + mun_domicilio, data = base, sum)
 
 names(tot_mun)[3] <- "total_casos_mun"
 
-tot_edo_mun <- left_join(tot_edo, tot_mun, by = c("edo_domicilio"))
+tot_edo_mun <- left_join(totales_edo, tot_mun, by = c("edo_domicilio"))
 
 
 
@@ -258,64 +394,6 @@ graph_edos <-  ggplot(tot_edo, aes(area = porcentaje, fill = categoria, label = 
 
 graph_edos
 
-##### ---------- 1.2. vars territoriales: distribucion por tiempo ---------------- ######
-base <- base %>% 
-  mutate(dif_tiempo = difftime(fecha_recepcion, fecha_hechos, units='days'))
-
-# total de casos por año 
-tot_hist <- aggregate(aux0 ~ ymd(fecha_hechos) , data = base, sum)
-names(tot_hist)[1] <- "fecha_hechos_day"
-
-# total de casos por año 
-tot_anual <- aggregate(aux0 ~ year(fecha_hechos) , data = base, sum)
-names(tot_anual)[1] <- "fecha_hechos_anual"
-
-# total de casos por año y estado
-tot_anual_edo <- aggregate(aux0 ~ year(fecha_hechos) + edo_domicilio , data = base, sum)
-names(tot_anual_edo)[1] <- "fecha_hechos_anual"
-
-# promedio de tiempo de denuncia entre hecho y recepcion en banco
-prom_anual_edo <- aggregate(dif_tiempo ~ year(fecha_hechos) + edo_domicilio , data = base, mean)
-names(prom_anual_edo)[1] <- "fecha_hechos_anual"
-prom_anual_edo$dif_tiempo <- as.numeric(round(prom_anual_edo$dif_tiempo), 2)
-
-
-prom_anual_edo$fecha_hechos_anual <- as.factor(prom_anual_edo$fecha_hechos_anual)
-
-
-#### grafs edo
-
-
-ggnac <- ggplot(data=tot_anual,aes(x=fecha_hechos_anual,y=aux0)) +
-  geom_line() +
-  xlab("Año")+ylab("Total de casos ~ histórico") +
-  ggtitle("Total de casos - histórico ")
-
-ggnac
-
-tot_anual$fecha_hechos_anual <- as.factor(tot_anual$fecha_hechos_anual)
-
-pgg <- ggplot(tot_anual, aes(x=fecha_hechos_anual, y=aux0, label = aux0, size = aux0,  group=1)) +
-  geom_line(colour='brown4', size =.4)+
-  geom_point(colour='brown4')+
-  xlab("")+ theme_bw()+
-  theme(axis.text.x = element_text(angle = 90)) +
-  geom_text(check_overlap = TRUE, vjust = -1, nudge_x = 0.05, size=3)+
-  xlab("Total de casos por año ~ histórico")+ylab("Número de casos") +
-  ggtitle("Total de casos por año ")
-
-pgg
-
-
-gg_edo_prom <- 
-  ggplot(prom_anual_edo, aes(x = fecha_hechos_anual, y = dif_tiempo, size=dif_tiempo, label = paste(edo_domicilio, dif_tiempo, sep = "\n"))) +
-  geom_point(aes( col = dif_tiempo), alpha = 0.5) +
-  scale_size(range = c(5, 10)) + 
-  scale_colour_gradientn(colours=c("yellow","red")) + theme_bw()+
-  xlab("Años")+ylab("Diferencia de tiempo (fecha del hecho - fecha recepción) ~ en días") +
-  ggtitle("Promedio de tiempo por estado ")
-
-gg_edo_prom
 
 
 
