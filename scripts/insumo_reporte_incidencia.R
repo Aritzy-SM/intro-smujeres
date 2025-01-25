@@ -10,19 +10,19 @@ options(scipen=999)
 
 ##########################################################
 
-setwd("/Users/patatas/Documents/aritzy/mujeres/")
+setwd("/Users/asanchezm/Documents/")
 
 
 #### 1. importar bases ####
 
-incidencia  <- read_excel("incidencia delictiva/datos/Estatal-Delitos-2015-2024_dic2024.xlsx")
+incidencia  <- read_excel("incidencia delictiva/datos/Estatal-Delitos-2015-2024_dic2024/Estatal-Delitos-2015-2024_dic2024.xlsx")
 
-victimas <- read_xlsx("incidencia delictiva/datos/Estatal-V¡ctimas-2015-2024_dic2024.xlsx")
+victimas <- read_xlsx("incidencia delictiva/datos/Estatal-Víctimas-2015-2024_dic2024/Estatal-Víctimas-2015-2024_dic2024.xlsx")
 
 ##### ---------- 1.1. importar poblacion para sacar tasas de cambio--------------- ######
 
 
-pob_conapo <- read_xlsx("/Users/patatas/Documents/aritzy/mujeres/pob/conapo/0_Pob_Inicio_1950_2070.xlsx")
+pob_conapo <- read_xlsx("pob/conapo/0_Pob_Inicio_1950_2070.xlsx")
 
 names(pob_conapo)
 names(pob_conapo)[2] <- "anual"
@@ -187,35 +187,30 @@ yearBefore <- floor_date(Sys.Date() - years(1), "year")
 
 biyearBefore <- floor_date(Sys.Date() - years(2), "year")
 
+mes_actual <- as.Date(mes_actual)
+yearBefore <- as.Date(yearBefore)
+biyearBefore <- as.Date(biyearBefore)
+
+a1 <- interval(mes_actual, yearBefore)
+a2 <- interval(yearBefore, biyearBefore)
+
+a1 <- as.list(a1)
+a2 <- as.list(a2)
+print(a1)
 
 #### agregar por sumatorias anuales a 12 meses
 #### 
 
 
-df <- incidencia_objetivo_t %>%
-  mutate( periodo = ifelse (as_date(incidencia_objetivo_t$datetime) >= as_date(yearBefore), "a1",
-                               ifelse (as_date(yearBefore) < as_date(datetime) < as_date(biyearBefore), "a2", "sin comp" )))
+incidencia_objetivo_t <- incidencia_objetivo_t %>% 
+  mutate(period = case_when(
+    datetime %within% a1 ~ "periodo_a1",
+    datetime %within% a2 ~ "periodo_a2"))
 
 
-a2 <- interval(yearBefore, biyearBefore)
+incidencia_ac1 <- aggregate(total_mensual ~ period + Clave_Ent + Entidad, data = incidencia_objetivo_t, sum)
 
 
-df <- incidencia_objetivo_t %>%
-  filter(periodo = ifelse (datetime %in% a1, "a1", "falta"))
-
-
-df <- incidencia_objetivo_t %>%
-mutate(period = case_when(incidencia_objetivo_t$datetime > yearBefore~ "a1",
-                          datetime %in% a2 ~ "a2"))
-       
-
-
-
-prueba <- incidencia_objetivo_t %>%
-  rowwise() %>% 
-  replace(is.na(.), 0) %>%
-  mutate(a1 = ifelse(Año==2019, sum(Enero, Febrero, Marzo, Abril, Mayo, Junio, Julio, Agosto, Septiembre, Octubre, Noviembre, Diciembre), 0),
-         a2 = ifelse(Año==2020, sum(Enero, Febrero, Marzo, Abril, Mayo, Junio, Julio, Agosto, Septiembre, Octubre, Noviembre), 0))
 
 #### agregar por es
 
