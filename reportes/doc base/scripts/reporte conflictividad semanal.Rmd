@@ -1,0 +1,494 @@
+---
+title: "reporte_s_mujeres"
+author: "Aritzy Sánchez"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Base de datos: variables
+
+```{r datos, echo=FALSE, warning=FALSE}
+library(pacman)
+p_load(readr, tidyverse, plyr, dplyr, tidyr, stringr, ggplot2, xlsx, BAMMtools, kableExtra, ggthemes, ggrepel, data.table, lubridate, scales)
+
+Sys.setlocale(category = "LC_ALL", locale = "es_ES.UTF-8")
+
+datos <- read_csv("/Users/patatas/Documents/aritzy/210531-bd-base de datos manifestaciones sociales.csv")
+
+datos$Actividad_económica_relacionada <- tolower(datos$Actividad_económica_relacionada)
+datos$Perfil_demandante <- tolower(datos$Perfil_demandante)
+
+lista_entidad <- unique(datos$Estado)
+
+datos <- datos %>% 
+  mutate(Estado = ifelse(Estado == "Distrito Federal", "Ciudad de México", 
+                         ifelse(Estado == "Veracruz de Ignacio de la Llave", "Veracruz",
+                                ifelse(Estado == "Coahuila de Zaragoza", "Coahuila",
+                                       ifelse(Estado == "Michoacán de Ocampo", "Michoacán", Estado)))))
+
+```
+
+### Información general
+
+Descripción de datos: la BD comprende la conflictividad social comprendida a través de los múltiples mecanismos de presión en el orden municipal.
+
+```{r datos-limpios, echo=FALSE, warning=FALSE}
+
+ datos_indicadores <- datos %>% 
+  select(1:3, 5:7, 9:16)
+
+datos_indicadores <- datos_indicadores[complete.cases(datos_indicadores), ]
+
+names(datos_indicadores)[7] <- "cve_mun"
+
+datos_indicadores <- datos_indicadores %>% 
+  mutate(Mes_num = ifelse(Mes == "Enero", 01,
+                          ifelse(Mes == "Febrero", 02, 
+                                 ifelse( Mes == "Marzo", 03,
+                                         ifelse( Mes == "Abril", 04,
+                                                 ifelse( Mes == "Mayo", 05, 
+                                                         ifelse(Mes == "Junio", 6,
+                                                                ifelse(Mes == "Julio", 7, 
+                                                                       ifelse(Mes == "Agosto", 8,
+                                                                              ifelse(Mes == "Septiembre", 9,
+                                                                                     ifelse(Mes == "Octubre", 10,
+                                                                                            ifelse(Mes == "Noviembre", 11, 12))))))))))))
+
+datos_indicadores <- datos_indicadores %>% 
+  mutate(fecha_amd = paste0(datos_indicadores$Año, "-", datos_indicadores$Mes_num, "-", datos_indicadores$Dia))
+
+datos_indicadores$fecha_amd <- as_date(datos_indicadores$fecha_amd)
+
+#hoy <- Sys.time()
+
+hoy <- Sys.time()
+hoy <- substr(hoy,1,10)
+
+hoy <- strftime(hoy, format = "%Y-%m-%d")
+
+mes <- as.Date(hoy, format="%Y-%m-%d")-27
+
+mes <- strftime(mes, format = "%Y-%m-%d")
+
+quincena <- as.Date(hoy, format="%Y-%m-%d")-14
+
+quincena <- strftime(quincena, format = "%Y-%m-%d")
+
+sem_4 <- as.Date(hoy, format="%Y-%m-%d")-27
+
+sem_3 <- as.Date(hoy, format="%Y-%m-%d")-21
+
+sem_2 <- as.Date(hoy, format="%Y-%m-%d")-14
+
+sem_1 <-as.Date(hoy, format="%Y-%m-%d")-7
+
+semana <- as.Date(hoy, format="%Y-%m-%d")-7
+
+semana <- strftime(semana, format = "%Y-%m-%d")
+
+datos_mensual <- datos_indicadores %>% 
+  filter(datos_indicadores$fecha_amd >= mes)
+
+
+datos_mensual$semana <- strftime(datos_mensual$fecha_amd, format = "%W")
+
+datos_mensual$semana <- as.numeric(datos_mensual$semana)
+
+# datos_mensual$semana <- datos_mensual$semana + 1
+
+datos_mensual_count <- datos_mensual %>% 
+  select(16) %>% 
+  group_by(fecha_amd) %>% 
+  count()
+
+datos_mensual_sem <- datos_mensual %>% 
+  select(17) %>% 
+  group_by(semana) %>% 
+  count()
+
+datos_mensual_label <- datos_mensual %>% 
+  select(17) %>% 
+  group_by(semana) %>% 
+  count()
+
+datos_mensual_label$label <- paste0("Semana ", datos_mensual_label$semana)
+
+datos_mensual_label <- datos_mensual_label %>% 
+  select(1,3)
+
+datos_mensual_label <- spread(datos_mensual_label, semana, label)
+
+colnames(datos_mensual_label)[1:4] <- paste0("semana_", colnames(datos_mensual_label)[1:4])
+
+names(datos_mensual_sem)[2] <- "total_semanal"
+
+datos_mensual_sem <- spread(datos_mensual_sem, semana, total_semanal)
+
+colnames(datos_mensual_sem)[1:4] <- paste0("semana_", colnames(datos_mensual_sem)[1:4])
+
+names(datos_mensual_count)[2] <- "total_diario"
+
+datos_mensual_count$fecha_label <- strftime(datos_mensual_count$fecha_amd, format = "%b-%d")
+
+```
+
+```{r hist-semanal, echo=FALSE, warning= FALSE, fig.width = 6.75, fig.height = 3.23}
+library(extrafont)
+loadfonts(quiet = T)
+
+fonts()
+
+ggplot(datos_mensual_count) +
+  geom_point(aes(x = fecha_amd, y = total_diario), stat="identity", colour = "#00B08B") +
+  geom_smooth(aes(x = fecha_amd, y = total_diario), stat="identity", colour = "#023858") +
+  geom_text(data= datos_mensual_count %>% 
+              filter(total_diario != 14),
+                    aes(x = fecha_amd, y = total_diario,label= total_diario), size =3, position=position_dodge(width=0.9), vjust=-1.25) +
+  geom_text(data= datos_mensual_count %>% 
+              filter(total_diario == 14),
+                    aes(x = fecha_amd, y = total_diario,label= total_diario), size =3, position=position_dodge(width=0.9), vjust=-1.25, hjust =.7) +
+  geom_vline(xintercept= as.Date(hoy)-6.5, linetype = "dashed") +
+  geom_vline(xintercept= as.Date(hoy)-13.5, linetype = "dashed") +
+  geom_vline(xintercept= as.Date(hoy)-20.5, linetype = "dashed") +
+  annotate("text", x = as.Date(sem_4)+3, y = 1, label = paste0(datos_mensual_sem$semana_3, " eventos"), family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_4)+3, y = 40, label = datos_mensual_label$semana_3, family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_3)+3, y = 1, label = paste0(datos_mensual_sem$semana_4, " eventos"), family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_3)+3, y = 40, label = datos_mensual_label$semana_4, family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_2)+3, y = 1, label = paste0(datos_mensual_sem$semana_5, " eventos"), family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_2)+3, y = 40, label = datos_mensual_label$semana_5, family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_1)+3, y = 1, label = paste0(datos_mensual_sem$semana_6, " eventos"), family = "Segoe UI", size = 3) +
+  annotate("text", x = as.Date(sem_1)+3, y = 40, label = datos_mensual_label$semana_6, family = "Segoe UI", size = 3) +
+  scale_x_date(breaks = seq(as.Date(mes), 
+                            as.Date(hoy), by = "1 day"), date_labels ="%b - %d")+
+  scale_y_continuous(limits = c(0,40)) +
+   theme_classic() +
+  theme(panel.border = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.line = element_line(size = 0.5, linetype = "solid",
+                                   colour = "black")) +
+  theme(axis.text.x = element_text(angle = 90, family = "Segoe UI"),
+        axis.title=element_text(size=9, family = "Segoe UI"))+
+  labs(
+    x= "Día",
+    y = "Número de eventos")
+
+
+```
+
+
+# Tabla con tasa de cambio de semana actual con respecto a semana pasada del total de eventos
+
+```{r datos-comparativo-quincena, echo=FALSE}
+
+datos_quincena<- datos_indicadores %>% 
+  filter(datos_indicadores$fecha_amd > quincena & datos_indicadores$fecha_amd <= hoy)
+
+datos_quincena$semana <- strftime(datos_quincena$fecha_amd, format = "%W")
+
+datos_quincena$semana <- as.numeric(datos_quincena$semana)
+
+datos_quincena_total <- datos_quincena %>% 
+  select(17) %>% 
+  group_by(semana) %>% 
+  count()
+
+datos_quincena_total <- datos_quincena_total %>% 
+  mutate(orden_sem = ifelse(semana == max(semana), "semana_actual", "semana_pasada"))
+
+datos_quincena_total <- datos_quincena_total %>% 
+  select(2,3) %>% 
+  spread(orden_sem, freq)
+
+datos_quincena_total <- datos_quincena_total %>% 
+  mutate(tasa_cambio = ((semana_actual-semana_pasada)/semana_pasada)*100)
+
+datos_quincena_total$tasa_cambio <- round(datos_quincena_total$tasa_cambio, 2)
+
+kable(datos_quincena_total, caption = "Porcentaje de cambio del total de eventos de esta semana con respecto a la semana pasada") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+```
+
+```{r hist-entidad, echo=FALSE, warning= FALSE, fig.width = 3.27, fig.height = 2.10}
+
+#### datos con totales dado entidad
+
+datos_semanal <- datos_indicadores %>% 
+  filter(datos_indicadores$fecha_amd > semana) %>% 
+  select(4, 8, 10, 16)
+
+datos_semanal_entidad <- datos_semanal %>% 
+  select(1) %>% 
+  group_by(Estado) %>% 
+  count()
+
+datos_semanal_entidad$total_semanal <- sum(datos_semanal_entidad$freq)
+
+datos_semanal_entidad <- datos_semanal_entidad %>% 
+  mutate(porc_entidad = round ((freq/total_semanal), 2))
+
+datos_semanal_entidad$entidad_ag <- ifelse(datos_semanal_entidad$porc_entidad < 0.04, "Otros", datos_semanal_entidad$Estado)
+
+datos_semanal_entidad <- datos_semanal_entidad[order(datos_semanal_entidad$porc_entidad),]
+
+datos_semanal_entidad$Estado <- factor(datos_semanal_entidad$Estado, levels=datos_semanal_entidad$Estado)
+
+levels(datos_semanal_entidad$Estado)
+
+datos_semanal_ent_ag <- datos_semanal_entidad %>% 
+  select(4,5)
+
+datos_semanal_ent_ag <- aggregate(porc_entidad ~ entidad_ag , data = datos_semanal_ent_ag, sum)
+
+datos_semanal_ent_ag$entidad_ag <- factor(datos_semanal_ent_ag$entidad_ag, levels= c("Otros", "Jalisco", "Chihuahua", "Oaxaca", "Sinaloa",  "Sonora", "Baja California", "Guerrero", "Puebla", "Quintana Roo", "Tamaulipas",  "Veracruz", "Ciudad de México" ))
+
+ggplot() +
+  geom_bar(data =datos_semanal_ent_ag, aes(x = entidad_ag, y = porc_entidad), stat="identity", width = .5 , fill = "#023858") +
+  geom_text(data= datos_semanal_ent_ag,
+            aes(x = entidad_ag, y = porc_entidad, label= scales::percent(porc_entidad)), position=position_dodge(width=0.9), hjust=-0.15, size= 3) +
+  scale_y_continuous(limits = c(0,1), labels=scales::percent) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.line = element_line(size = 0.5, linetype = "solid",
+                                   colour = "black")) +
+  theme(axis.text.x = element_text(angle = 90, family = "Segoe UI"),
+        axis.title = element_text(size=9, family = "Segoe UI"))+
+  labs( 
+    x= "Entidades",
+    y = "Comparativo en porcentaje") +
+  coord_flip()
+
+```
+
+# Tabla con tasa de cambio de semana actual con respecto a semana pasada del total de eventos por estado
+
+```{r datos-comparativos-entidades, echo=FALSE} 
+
+options(knitr.kable.NA = '0')
+
+datos_quincena_entidad <- datos_quincena %>% 
+  select(4, 17) %>% 
+  group_by(Estado, semana) %>% 
+  count()
+
+datos_quincena_entidad <- datos_quincena_entidad %>% 
+  mutate(orden_sem = ifelse(semana == max(semana), "semana_actual", "semana_pasada"))
+
+datos_quincena_entidad <- datos_quincena_entidad %>% 
+  select(4, 1, 3)
+
+datos_quincena_entidad <-  spread(datos_quincena_entidad, orden_sem, freq)
+
+datos_quincena_entidad[is.na(datos_quincena_entidad)] <- 0
+
+
+datos_quincena_entidad <- datos_quincena_entidad %>% 
+  mutate(tasa_cambio = ((semana_actual-semana_pasada)/semana_pasada)*100)
+
+datos_quincena_entidad$tasa_cambio <- round(datos_quincena_entidad$tasa_cambio, 2)
+
+kable(datos_quincena_entidad, caption = "Porcentaje de cambio del total de eventos por entidad de esta semana con respecto a la semana pasada") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+```
+## Tipo de conflicto
+
+```{r hist-tipo-conflicto, echo=FALSE, warning= FALSE, fig.width = 2.43, fig.height = 1.96}
+
+#### datos con totales dado tipo de conflicto
+
+datos_semanal_tipo <- datos_semanal %>% 
+  select(2) %>% 
+  group_by(Tipo_conflicto) %>% 
+  count()
+
+#### hardcodeo
+#datos_semanal_tipo <- rbind(datos_semanal_tipo, c("Agrario", 0))
+
+datos_semanal_tipo$freq <- as.numeric(datos_semanal_tipo$freq)
+
+datos_semanal_tipo <- datos_semanal_tipo[order(datos_semanal_tipo$freq),]
+
+datos_semanal_tipo$Tipo_conflicto <- factor(datos_semanal_tipo$Tipo_conflicto, levels=datos_semanal_tipo$Tipo_conflicto)
+
+ggplot() +
+  geom_bar(data =datos_semanal_tipo , aes(x = Tipo_conflicto, y = freq, fill = Tipo_conflicto), stat="identity", width = .5) +
+  geom_text(data= datos_semanal_tipo, aes(x = Tipo_conflicto, y = freq, label= freq), position=position_dodge(width=0.9), hjust=-0.15, size= 3) +
+  scale_y_continuous(limits = c(0,70)) +
+    scale_color_manual(values = c("#002B32", "#005845", "#000032",  "#0A2240", "#00586F",  "#00B189")) +
+  scale_fill_manual(values = c("#002B32", "#005845", "#000032", "#0A2240", "#00586F",  "#00B189")) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.line = element_line(size = 0.5, linetype = "solid",
+                                   colour = "black"), 
+        legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, family = "Segoe UI"),
+        axis.text.y = element_text(size = 10 , family = "Segoe UI"),
+        axis.title = element_text(size=9, family = "Segoe UI"))+
+  labs( 
+    x= "Tipos de conflicto",
+    y = "Número de eventos") +
+  coord_flip()
+
+```
+
+# Tabla con tasa de cambio de semana actual con respecto a semana pasada del total de eventos
+
+```{r datos-comparativos-tipo-conflicto, echo=FALSE}
+
+options(knitr.kable.NA = '0')
+
+datos_quincena_tipo <- datos_quincena %>% 
+  select(8, 17) %>% 
+  group_by(Tipo_conflicto, semana) %>% 
+  count()
+
+datos_quincena_tipo <- datos_quincena_tipo %>% 
+  mutate(orden_sem = ifelse(semana == max(semana), "semana_actual", "semana_pasada"))
+
+datos_quincena_tipo <- datos_quincena_tipo %>% 
+  select(4, 1, 3)
+
+datos_quincena_tipo <- spread(datos_quincena_tipo, orden_sem, freq)
+
+datos_quincena_tipo <- rbind(datos_quincena_tipo, c("Agrario", 0,0 ))
+
+datos_quincena_tipo$semana_actual <- as.numeric(datos_quincena_tipo$semana_actual)
+
+datos_quincena_tipo$semana_pasada <- as.numeric(datos_quincena_tipo$semana_pasada)
+
+datos_quincena_tipo <- datos_quincena_tipo %>% 
+  mutate(tasa_cambio = ((semana_actual-semana_pasada)/semana_pasada)*100)
+
+datos_quincena_tipo$tasa_cambio <- round(datos_quincena_tipo$tasa_cambio, 2)
+
+kable(datos_quincena_tipo, caption = "Porcentaje de cambio del total de eventos por tipo de conflicto de esta semana con respecto a la semana pasada") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+```
+
+# Radicalización
+
+```{r hist-radicalizacion, echo=FALSE, warning= FALSE, fig.width = 2.625, fig.height = 1.98}
+
+#### datos con totales dado radicalización 
+datos_semanal_rad <- datos_semanal %>% 
+  select(3) %>% 
+  group_by(Radicalización) %>% 
+  count()
+# 
+datos_semanal_rad <- rbind(datos_semanal_rad, c("Preconflicto", 0))
+# 
+datos_semanal_rad <- rbind(datos_semanal_rad, c("Situación de Caos", 0))
+
+# datos_semanal_rad <- datos_semanal_rad %>% 
+#   mutate(Radicalización = ifelse(Radicalización == "Caos", "Situación de Caos", Radicalización))
+
+
+datos_semanal_rad$freq <- as.numeric(datos_semanal_rad$freq)
+
+datos_semanal_rad$Radicalización <- factor(datos_semanal_rad$Radicalización, levels = c("Preconflicto",  "Manifestación", "Confrontación", "Situación de Caos"), labels = c("Preconflicto",  "Manifestación", "Confrontación", "Situación de Caos"))
+
+ggplot() +
+  geom_bar(data =datos_semanal_rad , aes(x = Radicalización, y = freq, fill = Radicalización), stat="identity", width = .5) +
+  geom_text(data= datos_semanal_rad, aes(x = Radicalización, y = freq, label= freq), position=position_dodge(width=0.7), hjust=-0.1, size= 3) +
+  scale_y_continuous(limits = c(0,120)) +
+    scale_color_manual(values = c( "#fecc5c", "#fd8d3c", "#f03b20","#bd0026","#ffffb2", "#3690c0", "#74a9cf", "#a6bddb", "#d0d1e6", "#ece7f2", "#d9d9d9" )) +
+  scale_fill_manual(values = c("#fecc5c", "#fd8d3c", "#f03b20","#bd0026","#ffffb2", "#3690c0", "#74a9cf", "#a6bddb", "#d0d1e6", "#ece7f2", "#d9d9d9" )) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.line = element_line(size = 0.5, linetype = "solid",
+                                   colour = "black"), 
+        legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, family = "Segoe UI"),
+        axis.text.y = element_text(size = 8 , family = "Segoe UI"),
+        axis.title = element_text(size=7, family = "Segoe UI"))+
+  labs( 
+    x= "Radicalización",
+    y = "Número de eventos") +
+  coord_flip()
+
+```
+
+
+# Tabla con tasa de cambio de semana actual con respecto a semana pasada del total de eventos
+
+```{r datos-comparativos-radicalizacion, echo=FALSE}
+
+options(knitr.kable.NA = '0')
+
+datos_quincena_rad <- datos_quincena %>% 
+  select(10,17) %>% 
+  group_by(Radicalización, semana) %>% 
+  count()
+
+datos_quincena_rad <- datos_quincena_rad %>%
+   mutate(Radicalización = ifelse(Radicalización == "Caos", "Situación de Caos", Radicalización))
+
+# ###Llenar datos que no jalaron
+datos_quincena_rad <- rbind(datos_quincena_rad, c("Preconflicto", 20,0 ))
+datos_quincena_rad <- rbind(datos_quincena_rad, c("Preconflicto", 21,0 ))
+# datos_quincena_rad <- rbind(datos_quincena_rad, c("Situación de Caos", 5,0 ))
+#datos_quincena_rad <- rbind(datos_quincena_rad, c("Situación de Caos", 6,0 ))
+
+datos_quincena_rad <- datos_quincena_rad %>% 
+  mutate(orden_sem = ifelse(semana == max(semana), "semana_actual", "semana_pasada"))
+
+datos_quincena_rad$freq <- as.numeric(datos_quincena_rad$freq)
+
+datos_quincena_rad$Radicalización <- factor(datos_quincena_rad$Radicalización, levels = c("Situación de Caos", "Confrontación", "Manifestación", "Preconflicto"), labels = c("Situación de Caos", "Confrontación", "Manifestación", "Preconflicto"))
+
+datos_quincena_rad <- datos_quincena_rad %>% 
+  select(4, 1, 3)
+
+datos_quincena_rad <- spread(datos_quincena_rad, orden_sem, freq)
+
+datos_quincena_rad <- datos_quincena_rad %>% 
+  mutate(tasa_cambio = ((semana_actual-semana_pasada)/semana_pasada)*100)
+
+datos_quincena_rad$tasa_cambio <- round(datos_quincena_rad$tasa_cambio, 2)
+
+kable(datos_quincena_rad, caption = "Porcentaje de cambio del total de eventos por radicalización de esta semana con respecto a la semana pasada") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+```
+
+# Tabla con tasa de cambio de semana actual con respecto a semana pasada de los demandantes y total de eventos
+
+```{r datos-comparativos-demandante, echo=FALSE}
+
+options(knitr.kable.NA = '0')
+
+datos_quincena_demandante <- datos_quincena %>% 
+  select(13,17) %>% 
+  group_by(Perfil_demandante, semana) %>% 
+  count()
+
+datos_quincena_demandante <- datos_quincena_demandante %>% 
+  mutate(orden_sem = ifelse(semana == max(semana), "semana_actual", "semana_pasada"))
+
+datos_quincena_demandante <- datos_quincena_demandante %>% 
+  select(4, 1, 3)
+
+datos_quincena_demandante <- spread(datos_quincena_demandante, orden_sem, freq)
+
+datos_quincena_demandante <- datos_quincena_demandante %>% 
+  mutate(tasa_cambio = ((semana_actual-semana_pasada)/semana_pasada)*100)
+
+datos_quincena_demandante$tasa_cambio <- round(datos_quincena_demandante$tasa_cambio, 2)
+
+kable(datos_quincena_demandante, caption = "Porcentaje de cambio del total de eventos por tipo de demandante con respecto a la semana pasada") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F)
+
+```

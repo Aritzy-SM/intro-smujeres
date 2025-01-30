@@ -1,0 +1,333 @@
+---
+title: "Presentación de reportes incidencia, víctimas"
+output:
+  xaringan::moon_reader:
+    css: [default, metropolis, metropolis-fonts]
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+
+rm(list = ls())
+
+library(pacman)
+p_load(readr, tidyverse, plyr, dplyr, tidyr, stringr, ggplot2, xlsx, BAMMtools, kableExtra, ggthemes, ggrepel, data.table, lubridate, scales, xaringan, geomtextpath, ggstream, areaplot, RColorBrewer, treemap)
+
+#### Se fijan parÃÂ¡metros del ÃÂ¡rea de trabajo
+Sys.setlocale(category = "LC_ALL", locale = "es_ES.UTF-8")
+options(scipen=999)
+
+##########################################################
+
+setwd("/Users/asanchezm/Documents/")
+
+
+
+#### 1. importar bases ####
+
+#victimas <- read_csv("sesnsp/resultados_procesados/victimas_mensual_nac.csv",  encoding='latin1')
+
+victimas_nac_mes <- readr::read_csv(file="sesnsp/resultados_procesados/victimas_mensual_nac.csv", locale = readr::locale(encoding = "latin1"))
+
+victimas_nac_anual <- readr::read_csv(file="sesnsp/resultados_procesados/victimas_anual_nac.csv", locale = readr::locale(encoding = "latin1"))
+
+
+
+
+```
+
+
+```{r datos-limpios, echo=FALSE, warning=FALSE}
+
+victimas_nac_mes <- victimas_nac_mes %>% 
+  filter(Sexo == "Mujer") %>% 
+  mutate(subtipo_genero = paste0(subtipo, "-", Sexo))
+
+
+muertes_violentas <- victimas_nac_mes %>% 
+  filter(delito_ab == "homicidio_dol" | delito_ab == "feminicidio" )
+
+#agregar por compuesto de fem hom
+mv <- aggregate(total_mensual ~ datetime + pobtot, data = muertes_violentas, sum)
+
+###### unir pob para sacar tasas
+
+mv <- mv %>% 
+  mutate(mes2_t_pob = round((total_mensual/pobtot)*100000,2))
+
+mv$subtipo_genero <- "Homicidio doloso y Feminicidio-Mujer"
+
+#agregar por compuesto de fem hom anual
+mvt <- aggregate(total_mensual ~ year(datetime) + pobtot, data = muertes_violentas, sum)
+names(mvt)[3] <- "total_anual"
+###### unir pob para sacar tasas
+
+mvt <- mvt %>% 
+  mutate(anual_t_pob = round((total_anual/pobtot)*100000,2))
+
+mvt$subtipo_genero <- "Homicidio doloso y Feminicidio-Mujer"
+
+
+#creando columnas con nueva var que es la suma de ambas, tener en cuenta NA
+muertes_violentas <-  bind_rows(muertes_violentas, mv)
+
+
+```
+
+
+
+## Muertes violentas: comparativa nacional e histórica de la tendencia de homicidio doloso de mujeres y feminicidio 
+
+1. Muertes violentas: Tasa de feminicidio y homicidio doloso de mujeres 
+2. Muertes violentas: Total de feminicidio y homicidio doloso de mujeres
+3. Muertes violentas: Total anual de feminicidio y homicidio doloso de mujeres 
+4-7. Comparativa del total de los delitos que atentan contra la vida y la integridad corporal
+
+---
+
+### 1. Tasa de feminicidio y homicidio doloso de mujeres
+
+```{r hist-mensual, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+ggplot(muertes_violentas, aes(x = datetime, y = mes2_t_pob, colour = factor(subtipo_genero))) +
+  geom_point( size = 3) +
+  geom_line(aes(colour = factor(subtipo_genero)), size = 1.5)  +
+  geom_label(aes(label = mes2_t_pob), vjust = -0.5, color = "black", fill = "lightyellow", alpha = 0.5, size = 5 ) +
+  labs(title = "Tasa histórica de muertes violentas en mujeres",
+       x = "Años",
+       y = "Tasa p/c cien mil mujeres")+
+  theme_minimal() +
+    theme(legend.position="bottom")+
+  scale_color_brewer(palette = "Purples")
+
+```
+
+---
+
+### 2. Total de feminicidio y homicidio doloso de mujeres
+```{r tot-hist, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+ggplot(muertes_violentas, aes(x = datetime, y = total_mensual, colour = factor(subtipo_genero))) +
+  geom_point( size = 3) +
+  geom_line(aes(colour = factor(subtipo_genero)), size = 1.5)  +
+  geom_label(aes(label = total_mensual), vjust = -0.5, color = "black", fill = "lightyellow", alpha = 0.5, size = 5 ) +
+  labs(title = "Total histórico de muertes violentas en mujeres",
+       x = "Años",
+       y = "Total de mujeres") +
+  theme_minimal()+
+    theme(legend.position="bottom")+
+  scale_color_brewer(palette = "Purples")
+
+```
+
+
+---
+
+### 3. Tasa anual de feminicidio y homicidio doloso de mujeres
+```{r comp-t_anual, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+#remover NA para trabajar con sólo subtipos y remover var compuesta de hom + fem
+muertes_violentas <- muertes_violentas[complete.cases(muertes_violentas), ]
+
+comp_mt <- aggregate(total_mensual ~ year(datetime) + subtipo_genero + pob + pobtot, data = muertes_violentas, sum)
+names(comp_mt)[1] <- "y_datetime"
+
+names(comp_mt)[5] <- "total_anual"
+
+# sacar tasa
+comp_mt <- comp_mt %>% 
+  mutate(tasa_anual = round((total_anual/pobtot)*100000,2))
+
+comp_mt <-  comp_mt %>% 
+  select(y_datetime, subtipo_genero, tasa_anual)
+
+comp_mt$y_datetime <-  as.factor(comp_mt$y_datetime)
+
+comp_mt <- comp_mt %>%
+  arrange(desc(tasa_anual))%>%               # sort your dataframe
+  mutate(subtipo_genero = factor(subtipo_genero, unique(subtipo_genero)))
+# 
+# comp_mt$subtipo_genero <-  as.factor(comp_mt$subtipo_genero)
+
+ggplot(comp_mt, aes(fill=subtipo_genero, y=tasa_anual, x=y_datetime)) + 
+    geom_bar(position="stack", stat="identity") +
+    ggtitle("Tasa anual de muertes violentas segregada por tipo") +
+     geom_text(aes(label = tasa_anual), position = position_stack(vjust = 0.5), size = 5) +
+    theme_minimal() +
+    theme(legend.position="bottom")+
+  scale_fill_brewer(palette = "Purples") +
+      xlab("Años")+
+      ylab("Tasa por cada cien mil mujeres")
+
+
+```
+
+---
+
+
+### 4. Total de delitos que atentan contra las mujeres
+
+```{r treemap-anual-nac, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+
+comp_mv <- victimas_nac_anual %>%
+  filter(Sexo =="Mujer")
+
+comp_mv$label <- paste(comp_mv$subtipo, comp_mv$total_a2, sep = ", ")
+
+
+treemap(comp_mv,
+    index = c("bien_jur_afectado", "label"), vSize = "total_a2", type = "index",
+    border.col = c("black", "white"), # Color of borders of groups, of subgroups, of subsubgroups ....
+    border.lwds = c(7, 2) # Width of colors
+)
+
+
+
+
+```
+---
+
+### 5. Tasa de delitos que atentan contra las mujeres
+
+```{r comp-anual, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+comp_mv$label <- paste(comp_mv$subtipo, comp_mv$a2_t_pob, sep = ", ")
+
+
+treemap(comp_mv,
+    index = c("bien_jur_afectado", "label"), vSize = "a2_t_pob", type = "index",
+    border.col = c("black", "white"), # Color of borders of groups, of subgroups, of subsubgroups ....
+    border.lwds = c(7, 2) # Width of colors
+)
+
+```
+
+
+---
+
+### 6. Total de delitos que atentan contra la vida de las mujeres
+
+```{r treemap-anual-nac-vida, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+
+comp_mv <- victimas_nac_anual %>%
+  filter(Sexo =="Mujer") %>% 
+  filter(bien_jur_afectado == "La vida y la Integridad corporal")
+
+comp_mv$label <- paste(comp_mv$subtipo, comp_mv$total_a2, sep = ", ")
+
+
+treemap(comp_mv,
+    index = c("bien_jur_afectado", "label"), vSize = "total_a2", type = "index",
+    border.col = c("black", "white"), # Color of borders of groups, of subgroups, of subsubgroups ....
+    border.lwds = c(7, 2) # Width of colors
+)
+
+
+
+
+```
+---
+
+### 7. Tasa de delitos que atentan contra la vida de las mujeres
+
+```{r treemap-tanual-nac-vida, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+
+comp_mv <- victimas_nac_anual %>%
+  filter(Sexo =="Mujer") %>% 
+  filter(bien_jur_afectado == "La vida y la Integridad corporal")
+
+comp_mv$label <- paste(comp_mv$subtipo, comp_mv$a2_t_pob, sep = ", ")
+
+
+treemap(comp_mv,
+    index = c("bien_jur_afectado", "label"), vSize = "a2_t_pob", type = "index",
+    border.col = c("black", "white"), # Color of borders of groups, of subgroups, of subsubgroups ....
+    border.lwds = c(7, 2) # Width of colors
+)
+
+
+
+
+```
+
+
+
+
+## Muertes violentas: comparativa estatal de la tendencia de los últimos 12 meses de homicidio doloso de mujeres y feminicidio 
+
+1. Muertes violentas: Tasa anual de feminicidio y homicidio doloso de mujeres - tendencia de los últimos 12 meses
+2. Muertes violentas: Total anual de feminicidio y homicidio doloso de mujeres - tendencia de los últimos 12 meses
+3. Comparativa del total de los delitos que atentan contra la vida y la integridad corporal- tendencia histórica
+
+
+```{r datos-anual-estatal, echo=FALSE, warning= FALSE, show_col_types = FALSE}
+
+
+victimas_est_a <- readr::read_csv("~/sesnsp/resultados_procesados/victimas_anual_estatal.csv", locale = readr::locale(encoding = "latin1"), show_col_types = FALSE)
+
+```
+---
+### 1. Tasa anual de feminicidio y homicidio doloso de mujeres 
+```{r comp-t_anual_est, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+victimas_est_a <- victimas_est_a %>% 
+  filter(Sexo == "Mujer") %>% 
+  mutate(subtipo_genero = paste0(subtipo, "-", Sexo))
+
+
+victimas_est_a <- victimas_est_a %>% 
+  filter(delito_ab == "homicidio_dol" | delito_ab == "feminicidio" )
+
+victimas_est_a <- victimas_est_a %>% 
+  arrange(desc(a2_t_pob)) %>%               
+  mutate(Entidad = factor(Entidad, unique(Entidad)))
+
+
+
+  ggplot(victimas_est_a, aes(x = a2_t_pob, y = Entidad, size=a2_t_pob)) +
+  geom_point(aes( col = subtipo_genero)) +
+  scale_size(range = c(5, 5)) + 
+    geom_text(aes(label = a2_t_pob), hjust=-.5 ,  size = 6, vjust = -0.5, color = "black", fill = "lightyellow", alpha = 0.7) +
+  scale_color_brewer(palette = "Purples") + theme_minimal() +
+    theme(legend.position="bottom")+
+  xlab("Tasa por cada cien mil habitantes ~ estado")+ylab("Estados") +
+  ggtitle("Tasa de los últimos 12 meses de muertes violentas de mujeres por estado")
+
+
+
+```
+
+
+
+---
+### 2. Total anual de feminicidio y homicidio doloso de mujeres 
+
+```{r comp-anual_est, echo=FALSE, warning= FALSE, fig.width = 25, fig.height = 15}
+
+
+victimas_est_a <- victimas_est_a %>% 
+  arrange(desc(total_a2)) %>%               
+  mutate(Entidad = factor(Entidad, unique(Entidad)))
+
+
+  ggplot(victimas_est_a, aes(x = total_a2, y = Entidad, size=total_a2)) +
+  geom_point(aes( col = delito_ab)) +
+  scale_size(range = c(5, 10)) + 
+   geom_text(aes(label = total_a2), hjust=-.5 ,  size = 6, vjust = -0.5, color = "black", fill = "lightyellow", alpha = 0.5) +
+  scale_color_brewer(palette = "Purples") + theme_minimal() +
+    theme(legend.position="bottom")+
+  xlab("Total de casos ~ histórico")+ylab("Estados") +
+  ggtitle("Total de casos por estado ")
+
+
+
+```
+
+
+
+
